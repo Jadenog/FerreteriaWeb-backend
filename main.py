@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from routers import users
 from fastapi.staticfiles import StaticFiles
 
-
+# python -m uvicorn main:app --reload  --> para ejecutar el servidor de desarrollo, con recarga automática
 app = FastAPI()
 
 #routers

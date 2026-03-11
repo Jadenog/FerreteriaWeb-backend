@@ -1,8 +1,9 @@
 def user_schema(user) -> dict:
     return {
         "id": str(user["_id"]),
-        "username": user["username"],
-        "email": user["email"]
+        "name": user["name"],
+        "email": user["email"],
+        "password": user["password"]
     }
 
 def users_schema(users) -> list:

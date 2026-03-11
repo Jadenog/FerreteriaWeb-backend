@@ -30,3 +30,28 @@ async def user(user: User):
 @router.get("/", response_model=list[User])
 async def users():
     return users_schema(db_client.users.find())
+
+#actualizar un usuario
+@router.put("/", response_model=User)
+async def user(user: User):
+
+    user_dict = dict(user)
+    del user_dict["id"] # eliminamos el id del diccionario, porque lo vamos a generar automáticamente con MongoDB, que genera un id único para cada documento
+    try:
+        
+        db_client.users.find_one_and_replace({"_id": ObjectId(user.id)}, user_dict) #actualizamos el usuario en la base de datos, utilizando el cliente de la base de datos y la colección de usuarios, buscando el usuario por su id, y reemplazando el documento completo con el nuevo diccionario del usuario
+    except:
+        return {"error": "no ha sido posible actualizar el usuario"}
+
+    return search_user("_id", ObjectId(user.id))
+
+#eliminar un usuario
+@router.delete("/{id}")
+async def user(id: str, status_code=status.HTTP_204_NO_CONTENT):
+        
+        found = db_client.users.find_one_and_delete({"_id": ObjectId(id)})
+
+        if not found:
+            return {"error": "Usuario no ha posible eliminarse"}
+        else:
+             {"exito":"el usuario se elimino correctamente"}
