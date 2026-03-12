@@ -3,55 +3,94 @@ from db.models.user import User
 from db.client import db_client
 from db.schemas.user import user_schema, users_schema
 from bson import ObjectId
+from passlib.context import CryptContext
 
 router = APIRouter(prefix="/users", tags=["users"], responses={404: {"description": "Not found"}})
 
-#funciones
-def search_user(fiel: str, key):
+# Configuración de encriptación de contraseñas
+crypt = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+# ==============================
+# Funciones
+# ==============================
+
+def search_user(field: str, key):
     try:
-        user = db_client.users.find_one({fiel: key})
-        return User(**user_schema(user))
+        user = db_client.users.find_one({field: key})
+        if user:
+            return User(**user_schema(user))
+        return None
     except:
-        return { "Error": "no ha sido posible encontrar el usuario" }
-    
-#endpoints    
-#agregar un nuevo usuario
-@router.post("/",response_model=User, status_code=201)# manejo de codigos/errores http, en este caso 201 es creado
-async def user(user: User):
-        if type(search_user("email", user.email)) == User:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="El usuario ya existe")# si el usuario ya existe, devolvemos un error 204, que significa que no se ha podido crear el recurso porque ya existe
-        user_dict = dict(user)
-        del user_dict["id"] # eliminamos el id del diccionario, porque lo vamos a generar automáticamente con MongoDB, que genera un id único para cada documento
-        id = db_client.users.insert_one(user_dict).inserted_id #insertamos el usuario en la base de datos, utilizando el cliente de la base de datos y la colección de usuarios
-        new_user = user_schema(db_client.users.find_one({"_id": id})) #buscamos el usuario recién insertado en la base de datos, utilizando el id generado por MongoDB
-        return User(**new_user) 
+        return None
 
-#obtener usuarios
-@router.get("/", response_model=list[User])
-async def users():
-    return users_schema(db_client.users.find())
 
-#actualizar un usuario
-@router.put("/", response_model=User)
-async def user(user: User):
+# ==============================
+# Endpoints
+# ==============================
+
+# Agregar un nuevo usuario
+@router.post("/", response_model=User, status_code=201)
+async def create_user(user: User):
+
+    if search_user("email", user.email):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="El usuario ya existe"
+        )
 
     user_dict = dict(user)
-    del user_dict["id"] # eliminamos el id del diccionario, porque lo vamos a generar automáticamente con MongoDB, que genera un id único para cada documento
+    del user_dict["id"]
+
+    # Encriptar contraseña antes de guardar
+    user_dict["password"] = crypt.hash(user_dict["password"])
+
+    id = db_client.users.insert_one(user_dict).inserted_id
+
+    new_user = user_schema(db_client.users.find_one({"_id": id}))
+
+    return User(**new_user)
+
+
+# Obtener todos los usuarios
+@router.get("/", response_model=list[User])
+async def get_users():
+    return users_schema(db_client.users.find())
+
+
+# Actualizar un usuario
+@router.put("/", response_model=User)
+async def update_user(user: User):
+
+    user_dict = dict(user)
+    del user_dict["id"]
+
+    # Si se actualiza contraseña, volver a encriptarla
+    if "password" in user_dict:
+        user_dict["password"] = crypt.hash(user_dict["password"])
+
     try:
-        
-        db_client.users.find_one_and_replace({"_id": ObjectId(user.id)}, user_dict) #actualizamos el usuario en la base de datos, utilizando el cliente de la base de datos y la colección de usuarios, buscando el usuario por su id, y reemplazando el documento completo con el nuevo diccionario del usuario
+        db_client.users.find_one_and_replace(
+            {"_id": ObjectId(user.id)},
+            user_dict
+        )
     except:
-        return {"error": "no ha sido posible actualizar el usuario"}
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No ha sido posible actualizar el usuario"
+        )
 
     return search_user("_id", ObjectId(user.id))
 
-#eliminar un usuario
-@router.delete("/{id}")
-async def user(id: str, status_code=status.HTTP_204_NO_CONTENT):
-        
-        found = db_client.users.find_one_and_delete({"_id": ObjectId(id)})
 
-        if not found:
-            return {"error": "Usuario no ha posible eliminarse"}
-        else:
-             {"exito":"el usuario se elimino correctamente"}
+# Eliminar un usuario
+@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_user(id: str):
+
+    found = db_client.users.find_one_and_delete({"_id": ObjectId(id)})
+
+    if not found:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No se ha podido eliminar el usuario"
+        )

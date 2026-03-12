@@ -19,7 +19,6 @@ SECRET_KEY = "d7e87e274bfdc384a39836096de9ca641999bda2d686ac3196b54c3032207896" 
 ALGORITHM = "HS256"
 ACCESS_TOKEN_DURATION = 3  # minutos
 
-router = APIRouter()
 
 oauth2 = OAuth2PasswordBearer(tokenUrl="login")
 
@@ -31,8 +30,9 @@ crypt = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # ==============================
 
 def search_user(name: str):
-    if name in db_client.users:
-        return User(**db_client.users[name])
+    user = db_client.users.find_one({"name": name})
+    if user:
+        return User(**user_schema(user))
     return None
 
 
@@ -66,11 +66,6 @@ async def get_current_user(token: str = Depends(oauth2)):
     if user is None:
         raise credentials_exception
 
-    if user.disabled:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Usuario inactivo"
-        )
 
     return user
 
@@ -82,7 +77,7 @@ async def get_current_user(token: str = Depends(oauth2)):
 @router.post("/")
 async def login(form: OAuth2PasswordRequestForm = Depends()):
 
-    user = search_user(form.name)
+    user = search_user(form.username)
 
     if not user:
         raise HTTPException(
@@ -102,7 +97,6 @@ async def login(form: OAuth2PasswordRequestForm = Depends()):
         "access_token": access_token,
         "token_type": "bearer"
     }
-
 
 # ==============================
 # Ruta protegida
