@@ -1,9 +1,9 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, status
 from db.models.products import Product
 from db.client import db_client
 from db.schemas.products import product_schema, products_schema
 from bson import ObjectId
-from passlib.context import CryptContext
+
 
 router = APIRouter(prefix="/products", tags=["products"], responses={404: {"description": "Not found"}})
 
@@ -32,3 +32,12 @@ async def update_product(id: str, product: Product):
     product_dict["price"] = float(product_dict["price"])
     db_client.products.update_one({"_id": ObjectId(id)}, {"$set": product_dict})
     return product_schema(db_client.products.find_one({"_id": ObjectId(id)}))
+
+#eliminar un producto por id
+@router.delete("/{id}")
+async def product(id: str, status_code=status.HTTP_204_NO_CONTENT):
+        
+        found = db_client.products.find_one_and_delete({"_id": ObjectId(id)})
+
+        if not found:
+            return {"error": "Producto no encontrado"}
